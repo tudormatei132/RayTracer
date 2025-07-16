@@ -1,6 +1,7 @@
 #include <iostream>
 #include <SDL3/SDL.h>
 #include <vector>
+#include <thread>
 #include "Image.h"
 #include "Sphere.h"
 #include "Vector3.h"
@@ -15,8 +16,8 @@ static SDL_Texture* texture = NULL;
 #define WINDOW_WIDTH 400
 #define WINDOW_HEIGHT 300
 
-
-void updateView(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres) {
+void updateViewOMP(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres) {
+    #pragma omp parallel for collapse(2) schedule(dynamic)
     for (int i = 0; i < img.height; i++) {
         for (int j = 0; j < img.width; j++) {
             double u = double(j) / (img.width - 1);
@@ -24,8 +25,9 @@ void updateView(Image& img, const Vector3& camera, const Vector3& background, co
 
             double x = (2 * u - 1) * img.aspectRatio;
             double y = (1 - 2 * v);
-
-            Ray ray = Ray(camera, (Vector3(x, y, -1) - camera).normalized());
+            Vector3 direction = (Vector3(x, y, -1) - camera);
+            direction.normalize();
+            Ray ray = Ray(camera, direction);
             img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background));
             int index = (i * img.width + j) * 3;
             img.pixelArray[index + 0] = static_cast<unsigned char>(img.pixels[i][j].r);
@@ -36,6 +38,52 @@ void updateView(Image& img, const Vector3& camera, const Vector3& background, co
     }
 }
 
+void updateView(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres, int start, int end) {
+    
+    for (int i = start; i < end; i++) {
+        for (int j = 0; j < img.width; j++) {
+            double u = double(j) / (img.width - 1);
+            double v = double(i) / (img.height - 1);
+
+            double x = (2 * u - 1) * img.aspectRatio;
+            double y = (1 - 2 * v);
+            Vector3 direction = (Vector3(x, y, -1) - camera);
+            direction.normalize();
+            Ray ray = Ray(camera, direction);
+            img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background));
+            int index = (i * img.width + j) * 3;
+            img.pixelArray[index + 0] = static_cast<unsigned char>(img.pixels[i][j].r);
+            img.pixelArray[index + 1] = static_cast<unsigned char>(img.pixels[i][j].g);
+            img.pixelArray[index + 2] = static_cast<unsigned char>(img.pixels[i][j].b);
+
+        }
+    }
+}
+
+void updateViewParallel(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres) {
+    int numThreads = std::thread::hardware_concurrency();
+    std::vector<std::thread> threads;
+    int partialSize = img.height / numThreads;
+
+    for (int i = 0; i < numThreads; i++) {
+        int start = i * partialSize;
+        int end;
+        if (i == numThreads) {
+            end = img.height;
+        }
+        else {
+            end = start + partialSize;
+        }
+
+        threads.emplace_back(updateView, std::ref(img), std::cref(camera), std::cref(background), std::cref(spheres), start, end);
+
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+}
 
 void displayImage(Image& image, Vector3& camera, Vector3& background, std::vector<Sphere>& spheres) {
 
@@ -50,7 +98,7 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
         SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
         return;
     }
-
+    
     SDL_Texture* texture = SDL_CreateTexture(renderer,
         SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
         image.width, image.height);
@@ -79,7 +127,7 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
     SDL_RenderClear(renderer);
     SDL_RenderTexture(renderer, texture, nullptr, nullptr);
     SDL_RenderPresent(renderer);
-
+    
     SDL_Event event;
     bool running = true;
     while (running) {
@@ -116,7 +164,7 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
                     }
 
                 }
-                updateView(image, camera, background, spheres);
+                updateViewOMP(image, camera, background, spheres);
                 SDL_UpdateTexture(texture, nullptr, image.pixelArray.data(), image.width * 3);
                 SDL_RenderClear(renderer);
                 SDL_RenderTexture(renderer, texture, nullptr, nullptr);
@@ -146,7 +194,7 @@ int main() {
     Vector3 camera = Vector3(0, 0, 0);
     Vector3 background = Vector3(0, 0, 0);
 
-    updateView(img, camera, background, spheres);
+    updateViewParallel(img, camera, background, spheres);
 
     img.saveImage("result.ppm");
 

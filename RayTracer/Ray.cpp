@@ -30,7 +30,6 @@ Vector3 Ray::colorPixel(const std::vector<Sphere>& spheres, const Vector3& backg
 		if (t < closest_t && t != -1) {
 			closest_t = t;
 			s = &sphere;
-			std::cout << "Intersected\n";
 		}
 	}
 

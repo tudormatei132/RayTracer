@@ -26,6 +26,12 @@ struct Vector3 {
 		return Vector3(x / vecLength, y / vecLength, z / vecLength);
 	}
 
+	void normalize() {
+		double vecLength = std::sqrt(x * x + y * y + z * z);
+		x /= vecLength;
+		y /= vecLength;
+		z /= vecLength;
+	}
 	
 
 };
