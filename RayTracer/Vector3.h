@@ -17,6 +17,11 @@ struct Vector3 {
 		return Vector3(x - other.x, y - other.y, z - other.z);
 	}
 
+	// cross product
+	Vector3 operator*(Vector3 other) const {
+		return Vector3(y * other.z - z * other.y, z * other.x - other.z * x, x * other.y - y * other.x);
+	}
+
 	double dotProduct(const Vector3& other) const {
 		return x * other.x + y * other.y + z * other.z;
 	}
@@ -28,10 +33,16 @@ struct Vector3 {
 
 	void normalize() {
 		double vecLength = std::sqrt(x * x + y * y + z * z);
+		
 		x /= vecLength;
 		y /= vecLength;
 		z /= vecLength;
 	}
 	
+	void add(Vector3 other) {
+		x += other.x;
+		y += other.y;
+		z += other.z;
+	}
 
 };
