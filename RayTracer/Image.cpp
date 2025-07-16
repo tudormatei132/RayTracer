@@ -9,6 +9,7 @@ Image::Image(int width, int height, double maxColor, const std::string& filename
 	: width(width), height(height), maxColor(maxColor), filename(filename) {
 	pixels.resize(height, std::vector<Pixel>(width));
 	aspectRatio = (double) width / height;
+	pixelArray.resize(height * width * 3, 0);
 }
 
 Image::Image(const std::string& filename)
@@ -53,6 +54,7 @@ void Image::loadImage() {
 	// Allocate memory for the vector of pixels
 	if (pixels.capacity() == 0) {
 		pixels.resize(height, std::vector<Pixel>(width));
+		pixelArray.resize(height * width * 3);
 	}
 
 	// Get maxColor
@@ -75,7 +77,7 @@ void Image::loadImage() {
 		}
 		std::istringstream iss(header);
 		for (int i = 0; i < width; i++) {
-			double r, g, b;
+			float r, g, b;
 			iss >> r >> g >> b;
 			if (iss.fail()) {
 				throw std::runtime_error("Error reading pixel data from file: " + filename);
