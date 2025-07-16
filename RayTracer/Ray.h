@@ -9,5 +9,6 @@ public:
 
 	// Returns the moment when the ray hits the sphere, -1 if it doesn't
 	double intersectsSphere(const Sphere& sphere);
-	Vector3 colorPixel(const std::vector<Sphere>& spheres, const Vector3& backgroundColor);
+	Vector3 colorPixel(const std::vector<Sphere>& spheres, const Vector3& backgroundColor, const Vector3& cameraDir, const Vector3& camera);
+	Vector3 atT(const double t);
 };

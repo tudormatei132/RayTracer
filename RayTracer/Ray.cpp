@@ -1,6 +1,8 @@
 #include "Ray.h"
 #include <cmath>
 #include <iostream>
+
+
 Ray::Ray(const Vector3& origin, const Vector3& direction) : origin(origin), direction(direction) {};
 
 double Ray::intersectsSphere(const Sphere& sphere) {
@@ -22,7 +24,7 @@ double Ray::intersectsSphere(const Sphere& sphere) {
 	return (t >= 0) ? t : -1;
 }
 
-Vector3 Ray::colorPixel(const std::vector<Sphere>& spheres, const Vector3& backgroundColor) {
+Vector3 Ray::colorPixel(const std::vector<Sphere>& spheres, const Vector3& backgroundColor, const Vector3& cameraDir, const Vector3& camera) {
 	double closest_t = 1e9;
 	const Sphere *s = nullptr;
 	for (auto const& sphere : spheres) {
@@ -34,8 +36,19 @@ Vector3 Ray::colorPixel(const std::vector<Sphere>& spheres, const Vector3& backg
 	}
 
 	if (s != nullptr) {
-		return s->color;
+		Vector3 lightPos = camera;
+		Vector3 hitPoint = atT(closest_t);
+		Vector3 lightDir = (lightPos - hitPoint).normalized();
+		Vector3 normal = (hitPoint - s->center).normalized();
+
+		double intensity = std::max(0.0, normal.dotProduct(lightDir));
+		return s->color * intensity;
+		
 	}
 
 	return backgroundColor;
+}
+
+Vector3 Ray::atT(const double t) {
+	return origin + direction * t;
 }

@@ -3,6 +3,7 @@
 #include <vector>
 #include <thread>
 #include <numbers>
+#include <time.h>
 #include "Image.h"
 #include "Sphere.h"
 #include "Vector3.h"
@@ -14,32 +15,33 @@ static SDL_Texture* texture = NULL;
 
 Vector3 worldUp = Vector3(0, 1, 0), right = Vector3(0, 0, 0), up = Vector3(0, 0, 0);
 double fov = 60.0;
+int frameCount = 0;
+size_t lastTick = 0;
+#define WINDOW_WIDTH 600
+#define WINDOW_HEIGHT 400
 
-#define WINDOW_WIDTH 400
-#define WINDOW_HEIGHT 300
-
-void updateViewOMP(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres) {
-
-    #pragma omp parallel for collapse(2) schedule(dynamic)
-    for (int i = 0; i < img.height; i++) {
-        for (int j = 0; j < img.width; j++) {
-            double u = double(j) / (img.width - 1);
-            double v = double(i) / (img.height - 1);
-
-            double x = (2 * u - 1) * img.aspectRatio;
-            double y = (1 - 2 * v);
-            Vector3 direction = (Vector3(x, y, -1) - camera);
-            direction.normalize();
-            Ray ray = Ray(camera, direction);
-            img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background));
-            int index = (i * img.width + j) * 3;
-            img.pixelArray[index + 0] = static_cast<unsigned char>(img.pixels[i][j].r);
-            img.pixelArray[index + 1] = static_cast<unsigned char>(img.pixels[i][j].g);
-            img.pixelArray[index + 2] = static_cast<unsigned char>(img.pixels[i][j].b);
-
-        }
-    }
-}
+//void updateViewOMP(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres) {
+//
+//    #pragma omp parallel for collapse(2) schedule(dynamic)
+//    for (int i = 0; i < img.height; i++) {
+//        for (int j = 0; j < img.width; j++) {
+//            double u = double(j) / (img.width - 1);
+//            double v = double(i) / (img.height - 1);
+//
+//            double x = (2 * u - 1) * img.aspectRatio;
+//            double y = (1 - 2 * v);
+//            Vector3 direction = (Vector3(x, y, -1) - camera);
+//            direction.normalize();
+//            Ray ray = Ray(camera, direction);
+//            img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background, cameraDir));
+//            int index = (i * img.width + j) * 3;
+//            img.pixelArray[index + 0] = static_cast<unsigned char>(img.pixels[i][j].r);
+//            img.pixelArray[index + 1] = static_cast<unsigned char>(img.pixels[i][j].g);
+//            img.pixelArray[index + 2] = static_cast<unsigned char>(img.pixels[i][j].b);
+//
+//        }
+//    }
+//}
 
 void updateView(Image& img, const Vector3& camera, const Vector3& background, const std::vector<Sphere>& spheres, int start, int end, 
                 const Vector3& cameraDir) {
@@ -62,7 +64,7 @@ void updateView(Image& img, const Vector3& camera, const Vector3& background, co
             Vector3 direction = (lowerLeftCorner + horizontal * u + vertical * v - camera);
             direction.normalize();
             Ray ray = Ray(camera, direction);
-            img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background));
+            img.pixels[i][j] = Pixel(ray.colorPixel(spheres, background, cameraDir, camera));
             int index = (i * img.width + j) * 3;
             img.pixelArray[index + 0] = static_cast<unsigned char>(img.pixels[i][j].r);
             img.pixelArray[index + 1] = static_cast<unsigned char>(img.pixels[i][j].g);
@@ -98,6 +100,15 @@ void updateViewParallel(Image& img, const Vector3& camera, const Vector3& backgr
     }
 
 }
+
+Vector3 rotateCamera(const Vector3& cameraDir, const Vector3& axis, double angle) {
+    double cosA = cos(angle);
+    double sinA = sin(angle);
+
+    return cameraDir * cosA + axis * (axis.dotProduct(cameraDir)) * (1 - cosA) + axis * cameraDir * sinA;
+
+}
+
 
 void displayImage(Image& image, Vector3& camera, Vector3& background, std::vector<Sphere>& spheres, Vector3& cameraDir) {
 
@@ -145,6 +156,8 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
     SDL_Event event;
     bool running = true;
     while (running) {
+        frameCount++;
+        double angle = 0.05;
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_EVENT_QUIT) {
                 running = false;
@@ -153,7 +166,7 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
                 switch (event.key.scancode) {
                     
                     case SDL_SCANCODE_W: {
-                        camera.add(cameraDir * 0.1);
+                        camera.add(cameraDir * 0.5);
                         break;
                     }
                     
@@ -164,15 +177,25 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
                     }
                 
                     case SDL_SCANCODE_A: {
-                        camera.add(right * -0.1);
+                        cameraDir = rotateCamera(cameraDir, worldUp, angle);
                         break;
                     }
 
                     case SDL_SCANCODE_D: {
-                        camera.add(right * 0.1);
+                        cameraDir = rotateCamera(cameraDir, worldUp, -angle);
                         break;
                     }
-                    
+                    // TODO: limit the rotation angle for up/down rotations
+                    case SDL_SCANCODE_UP: {
+                        cameraDir = rotateCamera(cameraDir, right, angle);
+                        break;
+                    }
+
+                    case SDL_SCANCODE_DOWN: {
+                        cameraDir = rotateCamera(cameraDir, right, -angle);
+                        break;
+                    }
+
                     case SDL_SCANCODE_U: {
                         spheres[0].center.add(Vector3(0, 1, 0));
                         break;
@@ -188,14 +211,29 @@ void displayImage(Image& image, Vector3& camera, Vector3& background, std::vecto
                     }
 
                 }
-                updateViewParallel(image, camera, background, spheres, cameraDir);
-                SDL_UpdateTexture(texture, nullptr, image.pixelArray.data(), image.width * 3);
-                SDL_RenderClear(renderer);
-                SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-                SDL_RenderPresent(renderer);
+                
+                
             }
         }
         SDL_Delay(1);  
+        /*if (frameCount % 20 == 0) {
+            size_t thisTick = SDL_GetTicks();
+            double fps = ((double)(frameCount) / 1000.0) / ((double)(thisTick - lastTick));
+            lastTick = thisTick;
+            frameCount = 0;
+            SDL_Log("%f", fps);
+        }*/
+        updateViewParallel(image, camera, background, spheres, cameraDir);
+        SDL_UpdateTexture(texture, nullptr, image.pixelArray.data(), image.width * 3);
+        SDL_RenderClear(renderer);
+        SDL_RenderTexture(renderer, texture, nullptr, nullptr);
+        SDL_RenderPresent(renderer);
+
+
+        size_t thisTick = SDL_GetTicks();
+        double fps = (1000.0 / (thisTick - lastTick));
+        lastTick = thisTick;
+        SDL_Log("%f", fps);
     }
 
     SDL_DestroyTexture(texture);
@@ -216,7 +254,7 @@ int main() {
     spheres.push_back(Sphere(Vector3(3.0, 1.0, -6.0), 1.0, Vector3(0, 255, 0)));
     spheres.push_back(Sphere(Vector3(2.0, 2.0, -7.0), 2.0, Vector3(0, 0, 255)));
     Vector3 camera = Vector3(0, 0, 0);
-    Vector3 cameraDir = Vector3(0, 0, -1);
+    Vector3 cameraDir = Vector3(0, 0, -1).normalized();
     Vector3 background = Vector3(0, 0, 0);
 
     updateViewParallel(img, camera, background, spheres, cameraDir);
